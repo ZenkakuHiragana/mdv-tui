@@ -69,6 +69,12 @@ async function rasterizeMath(svgSource: string, maxWidthPx: number, density: num
   }
 
   return sharp(png)
+    .resize({
+      width: Math.max(1, Math.floor(maxWidthPx)),
+      fit: "inside",
+      withoutEnlargement: true,
+      kernel: "cubic",
+    })
     .png()
     .toBuffer();
 }

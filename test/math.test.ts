@@ -72,6 +72,7 @@ test("display math fits the terminal width without changing its aspect ratio", a
     const fitted = await renderPng(source, 10);
 
     assert.ok(natural.dimensions.widthPx > 90);
+    assert.ok(fitted.dimensions.widthPx <= 90);
     assert.equal(natural.dimensions.widthPx % 9, 0);
     assert.equal(natural.dimensions.heightPx % 18, 0);
     assert.equal(fitted.dimensions.widthPx % 9, 0);
