@@ -2,12 +2,16 @@
 
 Pi TUI を使って Markdown ファイルを端末へ表示する viewer である。
 
+## インストール
+
+```sh
+npm install -g @zenorg/mdv-tui
+```
+
 ## 起動
 
 ```sh
-npm install
-npm run build
-node dist/main.js fixtures/sample.md
+mdv "Markdownファイル"
 ```
 
 終了は `q` または `Esc`、`Ctrl-C`。上下移動、PageUp、PageDown、マウスホイールで文書をスクロールできる。

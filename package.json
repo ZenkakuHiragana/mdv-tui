@@ -1,6 +1,6 @@
 {
   "name": "@zenorg/mdv-tui",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "engines": {
     "node": ">=22.19.0"
@@ -10,7 +10,17 @@
     "check": "tsc --noEmit -p tsconfig.json",
     "start": "node dist/main.js",
     "dev": "tsx src/main.ts",
-    "test": "node --test --import tsx test/*.test.ts"
+    "test": "node --test --import tsx test/*.test.ts",
+    "prepare": "npm run build"
+  },
+  "bin": {
+    "mdv": "dist/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@earendil-works/pi-tui": "0.84.2",

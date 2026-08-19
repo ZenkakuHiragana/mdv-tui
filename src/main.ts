@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { watch, type FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -6,7 +7,7 @@ import { createDocumentAnchors, createDocumentComponents, DocumentView } from ".
 
 const fileArgument = process.argv[2];
 if (!fileArgument) {
-  console.error("使い方: mdviewer <Markdownファイル>");
+  console.error("使い方: mdv <Markdownファイル>");
   process.exit(2);
 }
 
