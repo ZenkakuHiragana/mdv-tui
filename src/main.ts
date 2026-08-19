@@ -2,7 +2,7 @@ import { watch, type FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { getCapabilities, Key, matchesKey, ProcessTerminal, ScrollView, TuiAltScreen, type Component } from "@earendil-works/pi-tui";
-import { createDocumentComponents, DocumentView } from "./document.js";
+import { createDocumentAnchors, createDocumentComponents, DocumentView } from "./document.js";
 
 const fileArgument = process.argv[2];
 if (!fileArgument) {
@@ -18,7 +18,18 @@ const scrollView = new ScrollView(documentView, {
   follow: "none",
   scrollbar: "auto",
 });
-const tui = new TuiAltScreen(terminal, false, undefined, { mouse: true });
+
+function handleUrl(url: string): void {
+  if (!url.startsWith("#")) {
+    return;
+  }
+  const contentWidth = Math.max(1, scrollView.getContentWidth(terminal.columns));
+  const offset = documentView.getAnchorOffset(url.slice(1), contentWidth);
+  if (offset !== undefined) {
+    scrollView.scrollTo(offset);
+  }
+}
+const tui = new TuiAltScreen(terminal, false, undefined, { mouse: true, openUrl: handleUrl });
 
 tui.setLayoutRoot(scrollView);
 tui.addInputListener((data) => {
@@ -52,7 +63,7 @@ async function reload(): Promise<void> {
     const maxMathWidthCells = Math.max(1, terminal.columns - 2);
     const components = await createDocumentComponents(source, documentPath, maxMathWidthCells);
     currentComponents = components;
-    documentView.setDocument(currentComponents);
+    documentView.setDocument(currentComponents, undefined, createDocumentAnchors(source));
     tui.requestRender(true);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);

@@ -1,4 +1,5 @@
-import { Marked, Markdown, Text, VStack, type Component, type Token, type Tokens } from "@earendil-works/pi-tui";
+import GithubSlugger from "github-slugger";
+import { Marked, Markdown, Text, VStack, stripTerminalSequences, type Component, type Token, type Tokens } from "@earendil-works/pi-tui";
 import { createImageComponent } from "./images.js";
 import { renderDisplayMath } from "./math.js";
 import { createMermaidComponent } from "./mermaid.js";
@@ -6,6 +7,43 @@ import { createMarkdownTheme } from "./theme.js";
 
 const markdownParser = new Marked();
 const markdownTheme = createMarkdownTheme();
+
+export interface DocumentAnchor {
+  readonly id: string;
+  readonly text: string;
+  readonly depth: number;
+}
+
+function getInlineText(token: Token): string {
+  if ("tokens" in token && Array.isArray(token.tokens)) {
+    return token.tokens.map(getInlineText).join("");
+  }
+  if ("text" in token && typeof token.text === "string") {
+    return token.text;
+  }
+  return "";
+}
+
+export function createDocumentAnchors(source: string): DocumentAnchor[] {
+  const slugger = new GithubSlugger();
+  const anchors: DocumentAnchor[] = [];
+
+  for (const part of splitDisplayMath(source)) {
+    if (part.kind !== "markdown") {
+      continue;
+    }
+    for (const token of markdownParser.lexer(part.source)) {
+      if (token.type !== "heading") {
+        continue;
+      }
+      const heading = token as Tokens.Heading;
+      const text = (heading.tokens ?? []).map(getInlineText).join("");
+      anchors.push({ id: slugger.slug(text), text, depth: heading.depth });
+    }
+  }
+
+  return anchors;
+}
 
 type DocumentPart =
   | { kind: "markdown"; source: string }
@@ -157,12 +195,15 @@ export async function createDocumentComponents(
 
 export class DocumentView extends VStack {
   private status?: Text;
+  private anchors: readonly DocumentAnchor[] = [];
+  private anchorOffsets = new Map<string, number>();
+  private anchorOffsetWidth?: number;
 
   constructor() {
     super([], { gap: 1, align: "start" });
   }
 
-  setDocument(components: Component[], status?: string): void {
+  setDocument(components: Component[], status?: string, anchors?: readonly DocumentAnchor[]): void {
     this.clear();
     if (status) {
       this.status = new Text(status, 1, 0);
@@ -173,6 +214,40 @@ export class DocumentView extends VStack {
     for (const component of components) {
       this.addChild(component);
     }
+    if (anchors) {
+      this.anchors = anchors;
+    }
+    this.anchorOffsets.clear();
+    this.anchorOffsetWidth = undefined;
     this.invalidate();
+  }
+
+  getAnchorOffset(fragment: string, width: number): number | undefined {
+    const safeWidth = Math.max(1, Math.floor(width));
+    if (this.anchorOffsetWidth !== safeWidth) {
+      const offsets = new Map<string, number>();
+      const lines = this.render(safeWidth);
+      let searchFrom = 0;
+
+      for (const anchor of this.anchors) {
+        const target = anchor.text.trim();
+        const headingWithMarker = `${"#".repeat(anchor.depth)} ${target}`;
+        const row = lines.findIndex((line, index) => {
+          if (index < searchFrom) {
+            return false;
+          }
+          const visibleLine = stripTerminalSequences(line).trim();
+          return visibleLine === target || visibleLine === headingWithMarker;
+        });
+        if (row !== -1) {
+          offsets.set(anchor.id, row);
+          searchFrom = row + 1;
+        }
+      }
+
+      this.anchorOffsets = offsets;
+      this.anchorOffsetWidth = safeWidth;
+    }
+    return this.anchorOffsets.get(fragment);
   }
 }
