@@ -2,7 +2,7 @@ import GithubSlugger from "github-slugger";
 import { Marked, Markdown, Text, VStack, stripTerminalSequences, type Component, type Token, type Tokens } from "@earendil-works/pi-tui";
 import { createImageComponent } from "./images.js";
 import { renderDisplayMath } from "./math.js";
-import { createMermaidComponent } from "./mermaid.js";
+import { MermaidDiagram } from "./mermaid.js";
 import { createMarkdownTheme } from "./theme.js";
 
 const markdownParser = new Marked();
@@ -160,7 +160,7 @@ async function createMarkdownComponents(source: string, documentPath: string): P
   for (const token of markdownParser.lexer(source)) {
     if (token.type === "code" && token.lang?.trim().split(/\s+/, 1)[0]?.toLowerCase() === "mermaid") {
       flushMarkdown();
-      components.push(createMermaidComponent(token.text));
+      components.push(new MermaidDiagram(token.text));
       continue;
     }
 
@@ -195,6 +195,9 @@ export async function createDocumentComponents(
 
 export class DocumentView extends VStack {
   private status?: Text;
+  private horizontalOffset = 0;
+  private mermaidDiagrams: MermaidDiagram[] = [];
+  private components: Component[] = [];
   private anchors: readonly DocumentAnchor[] = [];
   private anchorOffsets = new Map<string, number>();
   private anchorOffsetWidth?: number;
@@ -219,7 +222,57 @@ export class DocumentView extends VStack {
     }
     this.anchorOffsets.clear();
     this.anchorOffsetWidth = undefined;
+    this.components = components;
+    this.mermaidDiagrams = components.filter((component): component is MermaidDiagram => component instanceof MermaidDiagram);
+    for (const diagram of this.mermaidDiagrams) {
+      diagram.setHorizontalOffset(this.horizontalOffset);
+    }
     this.invalidate();
+  }
+
+  setHorizontalOffset(offset: number): void {
+    const next = Math.max(0, Math.floor(offset));
+    if (next === this.horizontalOffset) {
+      return;
+    }
+    this.horizontalOffset = next;
+    for (const diagram of this.mermaidDiagrams) {
+      diagram.setHorizontalOffset(next);
+    }
+    this.invalidate();
+  }
+
+  panBy(delta: number): void {
+    this.setHorizontalOffset(this.horizontalOffset + delta);
+  }
+  override render(width: number): string[] {
+    // 右端で →(または横ホイール右)を押し続けても内部オフセットが
+    // 際限なく増えないよう、表示できる最大値へ実効値を正規化する。
+    const maxOffset = this.mermaidDiagrams.reduce(
+      (max, diagram) => Math.max(max, diagram.maxOffsetForWidth(width)),
+      0,
+    );
+    if (this.horizontalOffset > maxOffset) {
+      this.horizontalOffset = maxOffset;
+      for (const diagram of this.mermaidDiagrams) {
+        diagram.setHorizontalOffset(maxOffset);
+      }
+    }
+    return super.render(width);
+  }
+
+  /** ドキュメント内の行 row(0 基点)が、クリップ中の Mermaid 図の領域かを返す。ミドルドラッグの開始判定に使う。 */
+  isClippedDiagramAt(row: number, width: number): boolean {
+    let current = 0;
+    const items: Component[] = this.status ? [this.status, ...this.components] : this.components;
+    for (const child of items) {
+      const count = child.render(width).length;
+      if (row >= current && row < current + count) {
+        return child instanceof MermaidDiagram && child.maxOffsetForWidth(width) > 0;
+      }
+      current += count;
+    }
+    return false;
   }
 
   getAnchorOffset(fragment: string, width: number): number | undefined {

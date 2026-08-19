@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { getCapabilities, Key, matchesKey, ProcessTerminal, ScrollView, TuiAltScreen, type Component } from "@earendil-works/pi-tui";
 import { createDocumentAnchors, createDocumentComponents, DocumentView } from "./document.js";
+import { createPanTerminal } from "./mouse-input.js";
 
 const fileArgument = process.argv[2];
 if (!fileArgument) {
@@ -13,13 +14,35 @@ if (!fileArgument) {
 }
 
 const documentPath = resolve(fileArgument);
-const terminal = new ProcessTerminal();
+const PAN_STEP_COLUMNS = 4;
+const rawTerminal = new ProcessTerminal();
 const documentView = new DocumentView();
 const scrollView = new ScrollView(documentView, {
   primary: true,
   follow: "none",
   scrollbar: "auto",
 });
+const terminal = createPanTerminal(
+  rawTerminal,
+  {
+    onWheel: (direction) => {
+      documentView.panBy(direction * PAN_STEP_COLUMNS);
+      tui.requestRender();
+    },
+    onDragBy: (delta) => {
+      documentView.panBy(delta);
+      tui.requestRender();
+    },
+  },
+  (x, y) => {
+    const contentWidth = Math.max(1, scrollView.getContentWidth(terminal.columns));
+    if (x >= contentWidth) {
+      return false; // スクロールバー列は対象外
+    }
+    const row = scrollView.scrollTop + y;
+    return documentView.isClippedDiagramAt(row, contentWidth);
+  },
+);
 
 function openExternalUrl(url: string): void {
   const command = process.platform === "win32"
@@ -50,6 +73,13 @@ tui.addInputListener((data) => {
   if (/^\u001b\[6;\d+;\d+t$/.test(data)) {
     tui.requestRender(true);
     scheduleReload();
+    return undefined;
+  }
+  const isLeft = matchesKey(data, Key.left);
+  const isRight = matchesKey(data, Key.right);
+  if (isLeft || isRight) {
+    documentView.panBy((isRight ? 1 : -1) * PAN_STEP_COLUMNS);
+    tui.requestRender();
     return undefined;
   }
   if (matchesKey(data, Key.ctrl("c")) || matchesKey(data, Key.escape) || matchesKey(data, "q")) {

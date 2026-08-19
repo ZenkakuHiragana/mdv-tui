@@ -29,6 +29,20 @@ graph TD
   B -->|いいえ| A
 ```
 
+## 横長のフローチャート
+
+```mermaid
+flowchart LR
+  A[Start] --> B[Initialize] --> C[Download package]
+  C --> D{Size OK?}
+  D -- yes --> E[Install]
+  D -- no  --> F[Warn user] --> G[Abort]
+  E --> H2[Update lockfile] --> I[Run tests]
+  I --> J{Done?}
+  J -- yes --> K[Release]
+  J -- no --> H3[Fix] --> I
+```
+
 ![ローカル画像](./sample.svg)
 
 ![埋め込み画像](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=)
