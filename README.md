@@ -15,6 +15,7 @@ node dist/main.js fixtures/sample.md
 対応する表示経路:
 
 - 通常の Markdown と日本語: Pi TUI `Markdown`
+- コードフェンス: `cli-highlight`
 - Mermaid: `grok-mermaid`
 - ローカル相対画像と `data URI`: Pi TUI `Image`
 - インライン LaTeX: Pi TUI の Unicode renderer

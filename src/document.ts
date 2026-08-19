@@ -139,11 +139,15 @@ async function createMarkdownComponents(source: string, documentPath: string): P
   return components;
 }
 
-export async function createDocumentComponents(source: string, documentPath: string): Promise<Component[]> {
+export async function createDocumentComponents(
+  source: string,
+  documentPath: string,
+  maxMathWidthCells = 100,
+): Promise<Component[]> {
   const components: Component[] = [];
   for (const part of splitDisplayMath(source)) {
     if (part.kind === "math") {
-      components.push(await renderDisplayMath(part.source));
+      components.push(await renderDisplayMath(part.source, maxMathWidthCells));
     } else {
       components.push(...await createMarkdownComponents(part.source, documentPath));
     }

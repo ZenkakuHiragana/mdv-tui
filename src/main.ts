@@ -1,7 +1,7 @@
 import { watch, type FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { Key, matchesKey, ProcessTerminal, ScrollView, TuiAltScreen, type Component } from "@earendil-works/pi-tui";
+import { getCapabilities, Key, matchesKey, ProcessTerminal, ScrollView, TuiAltScreen, type Component } from "@earendil-works/pi-tui";
 import { createDocumentComponents, DocumentView } from "./document.js";
 
 const fileArgument = process.argv[2];
@@ -22,6 +22,11 @@ const tui = new TuiAltScreen(terminal, false, undefined, { mouse: true });
 
 tui.setLayoutRoot(scrollView);
 tui.addInputListener((data) => {
+  if (/^\u001b\[6;\d+;\d+t$/.test(data)) {
+    tui.requestRender(true);
+    scheduleReload();
+    return undefined;
+  }
   if (matchesKey(data, Key.ctrl("c")) || matchesKey(data, Key.escape) || matchesKey(data, "q")) {
     tui.stop();
     watcher?.close();
@@ -44,7 +49,8 @@ async function reload(): Promise<void> {
   loading = true;
   try {
     const source = await readFile(documentPath, "utf8");
-    const components = await createDocumentComponents(source, documentPath);
+    const maxMathWidthCells = Math.max(1, terminal.columns - 2);
+    const components = await createDocumentComponents(source, documentPath, maxMathWidthCells);
     currentComponents = components;
     documentView.setDocument(currentComponents);
     tui.requestRender(true);
@@ -70,11 +76,21 @@ function scheduleReload(): void {
   reloadTimer = setTimeout(() => void reload(), 120);
 }
 
+function handleTerminalResize(): void {
+  tui.requestRender(true);
+  if (getCapabilities().images) {
+    terminal.write("\u001b[16t");
+    scheduleReload();
+  }
+}
+
 await reload();
 watcher = watch(documentPath, scheduleReload);
 tui.start();
+process.stdout.on("resize", handleTerminalResize);
 
 function shutdown(): void {
+  process.stdout.off("resize", handleTerminalResize);
   watcher?.close();
   tui.stop();
 }

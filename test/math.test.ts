@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import sharp from "sharp";
+import { getCellDimensions, getImageDimensions, setCellDimensions } from "@earendil-works/pi-tui";
+import test from "node:test";
+import { renderDisplayMath } from "../src/math.js";
+
+type ImageComponentData = {
+  base64Data: string;
+};
+
+async function renderPng(source: string, maxWidthCells: number) {
+  const component = await renderDisplayMath(source, maxWidthCells);
+  const { base64Data } = component as unknown as ImageComponentData;
+  const dimensions = getImageDimensions(base64Data, "image/png");
+  assert.ok(dimensions);
+  return {
+    buffer: Buffer.from(base64Data, "base64"),
+    dimensions,
+  };
+}
+
+async function visibleGlyphHeight(png: Buffer): Promise<number> {
+  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  let top = info.height;
+  let bottom = -1;
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      if (data[(y * info.width + x) * info.channels + 3] > 0) {
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y);
+      }
+    }
+  }
+  return bottom >= top ? bottom - top + 1 : 0;
+}
+
+test("display math follows terminal cell height in visible glyph size", async () => {
+  const original = getCellDimensions();
+  try {
+    setCellDimensions({ widthPx: 9, heightPx: 18 });
+    const normal = await renderPng(String.raw`x^2 + y^2 = z^2`, 100);
+    setCellDimensions({ widthPx: 9, heightPx: 36 });
+    const large = await renderPng(String.raw`x^2 + y^2 = z^2`, 100);
+
+    const normalHeight = await visibleGlyphHeight(normal.buffer);
+    const largeHeight = await visibleGlyphHeight(large.buffer);
+    assert.ok(largeHeight > normalHeight);
+    assert.ok(largeHeight / normalHeight > 1.5);
+  } finally {
+    setCellDimensions(original);
+  }
+});
+
+test("display math fits the terminal width without changing its aspect ratio", async () => {
+  const original = getCellDimensions();
+  try {
+    setCellDimensions({ widthPx: 9, heightPx: 18 });
+    const source = String.raw`a+b+c+d+e+f+g+h+i+j+k+l+m+n+o+p+q+r+s+t+u+v+w+x+y+z`;
+    const natural = await renderPng(source, 1000);
+    const fitted = await renderPng(source, 10);
+
+    assert.ok(natural.dimensions.widthPx > 90);
+    assert.ok(fitted.dimensions.widthPx <= 90);
+    const naturalRatio = natural.dimensions.widthPx / natural.dimensions.heightPx;
+    const fittedRatio = fitted.dimensions.widthPx / fitted.dimensions.heightPx;
+    assert.ok(Math.abs(fittedRatio / naturalRatio - 1) < 0.05);
+  } finally {
+    setCellDimensions(original);
+  }
+});

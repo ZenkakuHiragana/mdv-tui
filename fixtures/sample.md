@@ -11,7 +11,7 @@
 | --- | ---: |
 | 日本語 | 42 |
 
-```text
+```javascript
 const answer = 42;
 ```
 
