@@ -18,21 +18,54 @@ const mathDocument = mathjax.document("", { InputJax: tex, OutputJax: svg });
 const DEFAULT_MAX_WIDTH_CELLS = 100;
 const REFERENCE_CELL_HEIGHT_PX = 18;
 const REFERENCE_DENSITY = 108;
+const RASTER_SCALE = 2;
 
 function rasterDensity(cellHeightPx: number): number {
   return Math.max(1, REFERENCE_DENSITY * cellHeightPx / REFERENCE_CELL_HEIGHT_PX);
 }
 
 async function rasterizeMath(svgSource: string, maxWidthPx: number, density: number): Promise<Buffer> {
-  let png = await sharp(Buffer.from(svgSource), { density }).png().toBuffer();
+  let png = await sharp(Buffer.from(svgSource), { density: density * RASTER_SCALE }).png().toBuffer();
   const initialDimensions = getImageDimensions(png.toString("base64"), "image/png");
-  if (initialDimensions && initialDimensions.widthPx > maxWidthPx) {
-    png = await sharp(png)
-      .resize({ width: maxWidthPx, fit: "inside", withoutEnlargement: true })
-      .png()
-      .toBuffer();
+  if (!initialDimensions) {
+    return png;
   }
+
+  const logicalWidthPx = Math.max(1, Math.ceil(initialDimensions.widthPx / RASTER_SCALE));
+  const targetWidthPx = Math.min(logicalWidthPx, maxWidthPx);
+  png = await sharp(png)
+    .resize({ width: targetWidthPx, fit: "inside", withoutEnlargement: true, kernel: "cubic" })
+    .png()
+    .toBuffer();
   return png;
+}
+
+async function alignToCellCanvas(png: Buffer, cell: { widthPx: number; heightPx: number }): Promise<Buffer> {
+  const dimensions = getImageDimensions(png.toString("base64"), "image/png");
+  if (!dimensions) {
+    return png;
+  }
+
+  const columns = Math.max(1, Math.ceil(dimensions.widthPx / cell.widthPx));
+  const rows = Math.max(1, Math.ceil(dimensions.heightPx / cell.heightPx));
+  const targetWidthPx = columns * cell.widthPx;
+  const targetHeightPx = rows * cell.heightPx;
+  const right = targetWidthPx - dimensions.widthPx;
+  const bottom = targetHeightPx - dimensions.heightPx;
+  if (right === 0 && bottom === 0) {
+    return png;
+  }
+
+  return sharp(png)
+    .extend({
+      top: 0,
+      bottom,
+      left: 0,
+      right,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png()
+    .toBuffer();
 }
 
 export async function renderDisplayMath(
@@ -49,10 +82,11 @@ export async function renderDisplayMath(
     containerWidth: maxWidthPx,
   });
   const svgSource = adaptor.innerHTML(node).replaceAll("currentColor", "#e6edf3");
-  const png = await rasterizeMath(svgSource, maxWidthPx, rasterDensity(cell.heightPx));
+  const rasterized = await rasterizeMath(svgSource, maxWidthPx, rasterDensity(cell.heightPx));
+  const png = await alignToCellCanvas(rasterized, cell);
   const base64 = png.toString("base64");
   const dimensions: ImageDimensions | null = getImageDimensions(base64, "image/png");
-  const imageLimits = dimensions ? naturalImageLimits(dimensions) : {
+  const imageLimits = dimensions ? naturalImageLimits(dimensions, cell) : {
     maxWidthCells: boundedWidthCells,
     maxHeightCells: 18,
   };
