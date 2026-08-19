@@ -24,5 +24,3 @@ mdv "Markdownファイル"
 - ローカル相対画像と `data URI`: Pi TUI `Image`
 - インライン LaTeX: Pi TUI の Unicode renderer
 - 表示 LaTeX: MathJax で SVG 組版し、PNG に変換して端末画像として表示
-
-第一版では遠隔 URL の画像と、インライン数式を画像のまま行内へ配置する処理は扱わない。
