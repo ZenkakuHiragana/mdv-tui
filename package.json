@@ -1,5 +1,5 @@
 {
-  "name": "mdviewer",
+  "name": "@zenorg/mdv-tui",
   "private": true,
   "type": "module",
   "engines": {

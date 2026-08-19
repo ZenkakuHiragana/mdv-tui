@@ -1,4 +1,4 @@
-# mdviewer
+# mdv-tui
 
 Pi TUI を使って Markdown ファイルを端末へ表示する viewer である。
 
