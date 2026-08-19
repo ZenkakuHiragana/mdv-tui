@@ -18,26 +18,21 @@ const mathDocument = mathjax.document("", { InputJax: tex, OutputJax: svg });
 const DEFAULT_MAX_WIDTH_CELLS = 100;
 const REFERENCE_CELL_HEIGHT_PX = 18;
 const REFERENCE_DENSITY = 108;
-const RASTER_SCALE = 2;
 
 function rasterDensity(cellHeightPx: number): number {
   return Math.max(1, REFERENCE_DENSITY * cellHeightPx / REFERENCE_CELL_HEIGHT_PX);
 }
 
 async function rasterizeMath(svgSource: string, maxWidthPx: number, density: number): Promise<Buffer> {
-  let png = await sharp(Buffer.from(svgSource), { density: density * RASTER_SCALE }).png().toBuffer();
-  const initialDimensions = getImageDimensions(png.toString("base64"), "image/png");
-  if (!initialDimensions) {
+  const png = await sharp(Buffer.from(svgSource), { density }).png().toBuffer();
+  const dimensions = getImageDimensions(png.toString("base64"), "image/png");
+  if (!dimensions || dimensions.widthPx <= maxWidthPx) {
     return png;
   }
 
-  const logicalWidthPx = Math.max(1, Math.ceil(initialDimensions.widthPx / RASTER_SCALE));
-  const targetWidthPx = Math.min(logicalWidthPx, maxWidthPx);
-  png = await sharp(png)
-    .resize({ width: targetWidthPx, fit: "inside", withoutEnlargement: true, kernel: "cubic" })
+  return sharp(png)
     .png()
     .toBuffer();
-  return png;
 }
 
 async function alignToCellCanvas(png: Buffer, cell: { widthPx: number; heightPx: number }): Promise<Buffer> {
