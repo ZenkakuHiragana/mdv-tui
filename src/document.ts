@@ -81,14 +81,14 @@ function isImageToken(token: Token): token is Tokens.Image {
 async function createParagraphComponent(token: Tokens.Paragraph, documentPath: string): Promise<Component> {
   const inlineTokens = token.tokens ?? [];
   if (!inlineTokens.some(isImageToken)) {
-    return new Markdown(token.raw, 1, 0, markdownTheme);
+    return new Markdown(token.raw, 0, 0, markdownTheme);
   }
 
   const children: Component[] = [];
   let text = "";
   const flushText = () => {
     if (text) {
-      children.push(new Markdown(text, 1, 0, markdownTheme));
+      children.push(new Markdown(text, 0, 0, markdownTheme));
       text = "";
     }
   };
@@ -114,7 +114,7 @@ async function createMarkdownComponents(source: string, documentPath: string): P
   let markdown = "";
   const flushMarkdown = () => {
     if (markdown.trim()) {
-      components.push(new Markdown(markdown, 1, 0, markdownTheme));
+      components.push(new Markdown(markdown, 0, 0, markdownTheme));
     }
     markdown = "";
   };
