@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { watch, type FSWatcher } from "node:fs";
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { getCapabilities, Key, matchesKey, ProcessTerminal, ScrollView, TuiAltScreen, type Component } from "@earendil-works/pi-tui";
@@ -20,8 +21,20 @@ const scrollView = new ScrollView(documentView, {
   scrollbar: "auto",
 });
 
+function openExternalUrl(url: string): void {
+  const command = process.platform === "win32"
+    ? "explorer.exe"
+    : process.platform === "darwin"
+      ? "open"
+      : "xdg-open";
+  const child = spawn(command, [url], { detached: true, stdio: "ignore" });
+  child.on("error", () => undefined);
+  child.unref();
+}
+
 function handleUrl(url: string): void {
   if (!url.startsWith("#")) {
+    openExternalUrl(url);
     return;
   }
   const contentWidth = Math.max(1, scrollView.getContentWidth(terminal.columns));
