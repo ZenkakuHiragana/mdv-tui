@@ -1,26 +1,64 @@
+import { createRequire } from "node:module";
+import { dirname } from "node:path";
+import { pathToFileURL } from "node:url";
 import { getCellDimensions, getImageDimensions, Image, type Component, type ImageDimensions } from "@earendil-works/pi-tui";
-import { liteAdaptor } from "mathjax-full/js/adaptors/liteAdaptor.js";
-import { RegisterHTMLHandler } from "mathjax-full/js/handlers/html.js";
-import { AllPackages } from "mathjax-full/js/input/tex/AllPackages.js";
-import { TeX } from "mathjax-full/js/input/tex.js";
-import { SVG } from "mathjax-full/js/output/svg.js";
-import { mathjax } from "mathjax-full/js/mathjax.js";
+import MathJax from "mathjax";
 import sharp from "sharp";
 import { imageTheme } from "./theme.js";
 import { naturalImageLimits } from "./image-sizing.js";
 
-const adaptor = liteAdaptor();
-RegisterHTMLHandler(adaptor);
-const tex = new TeX({ packages: AllPackages });
-const svg = new SVG({ fontCache: "none" });
-const mathDocument = mathjax.document("", { InputJax: tex, OutputJax: svg });
+const require = createRequire(import.meta.url);
+const mathJaxFontRoot = dirname(require.resolve("@mathjax/mathjax-newcm-font/svg.js"));
+const BLACKER = 18;
+
+type MathJaxInstance = {
+  tex2svg: (source: string, options: Record<string, unknown>) => unknown;
+  svgStylesheet: () => unknown;
+  startup: {
+    adaptor: {
+      innerHTML: (node: unknown) => string;
+      outerHTML: (node: unknown) => string;
+    };
+  };
+};
+
+function loadMathJaxModule(file: string): Promise<unknown> {
+  return import(file.startsWith("file:") ? file : pathToFileURL(file).href);
+}
+
+const mathJaxReady: Promise<MathJaxInstance> = MathJax.init({
+  loader: {
+    load: ["input/tex", "output/svg"],
+    paths: { "mathjax-newcm": mathJaxFontRoot },
+    require: loadMathJaxModule,
+  },
+  tex: {
+    packages: { "[+]": ["ams", "autoload"] },
+  },
+  svg: {
+    fontCache: "none",
+    blacker: BLACKER,
+  },
+}).then((instance: unknown) => instance as MathJaxInstance);
 
 const DEFAULT_MAX_WIDTH_CELLS = 100;
 const REFERENCE_CELL_HEIGHT_PX = 18;
-const REFERENCE_DENSITY = 108;
+const REFERENCE_DENSITY = 135;
 
 function rasterDensity(cellHeightPx: number): number {
   return Math.max(1, REFERENCE_DENSITY * cellHeightPx / REFERENCE_CELL_HEIGHT_PX);
+}
+
+function embedBlackerStyles(svgSource: string, stylesheet: string): string {
+  const rule = stylesheet.match(
+    /mjx-container\[jax="SVG"\] path\[data-c\], mjx-container\[jax="SVG"\] use\[data-c\] \{[\s\S]*?\}/,
+  )?.[0];
+  if (!rule) {
+    return svgSource;
+  }
+
+  const standaloneRule = rule.replaceAll('mjx-container[jax="SVG"] ', "");
+  return svgSource.replace("</svg>", `<style>${standaloneRule}</style></svg>`);
 }
 
 async function rasterizeMath(svgSource: string, maxWidthPx: number, density: number): Promise<Buffer> {
@@ -70,13 +108,18 @@ export async function renderDisplayMath(
   const cell = getCellDimensions();
   const boundedWidthCells = Math.max(1, Math.floor(maxWidthCells));
   const maxWidthPx = Math.max(1, Math.floor(boundedWidthCells * cell.widthPx));
-  const node = mathDocument.convert(source, {
+  const mathJax = await mathJaxReady;
+  const node = mathJax.tex2svg(source, {
     display: true,
     em: cell.heightPx,
     ex: cell.heightPx / 2,
     containerWidth: maxWidthPx,
   });
-  const svgSource = adaptor.innerHTML(node).replaceAll("currentColor", "#e6edf3");
+  const adaptor = mathJax.startup.adaptor;
+  const svgSource = embedBlackerStyles(
+    adaptor.innerHTML(node).replaceAll("currentColor", "#e6edf3"),
+    adaptor.outerHTML(mathJax.svgStylesheet()),
+  );
   const rasterized = await rasterizeMath(svgSource, maxWidthPx, rasterDensity(cell.heightPx));
   const png = await alignToCellCanvas(rasterized, cell);
   const base64 = png.toString("base64");
