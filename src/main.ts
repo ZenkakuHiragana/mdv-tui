@@ -6,10 +6,15 @@ import { resolve } from "node:path";
 import { getCapabilities, Key, matchesKey, ProcessTerminal, ScrollView, TuiAltScreen, type Component } from "@earendil-works/pi-tui";
 import { createDocumentAnchors, createDocumentComponents, DocumentView } from "./document.js";
 import { createPanTerminal } from "./mouse-input.js";
+import { applyWindowOpsResponses, formatTerminalDiagnostics, resolveTerminalCapabilities } from "./terminal-capabilities.js";
 
 const fileArgument = process.argv[2];
+if (process.argv.includes("--diagnose-terminal")) {
+  console.log(formatTerminalDiagnostics(await resolveTerminalCapabilities()));
+  process.exit(0);
+}
 if (!fileArgument) {
-  console.error("使い方: mdv <Markdownファイル>");
+  console.error("使い方: mdv <Markdownファイル> | mdv --diagnose-terminal");
   process.exit(2);
 }
 
@@ -70,10 +75,15 @@ const tui = new TuiAltScreen(terminal, false, undefined, { mouse: true, openUrl:
 
 tui.setLayoutRoot(scrollView);
 tui.addInputListener((data) => {
-  if (/^\u001b\[6;\d+;\d+t$/.test(data)) {
-    tui.requestRender(true);
-    scheduleReload();
-    return undefined;
+  // セル寸法の応答は pi-tui へ渡さず自前で検査する。あり得ない値をそのまま
+  // 採用すると Kitty graphics が画像を誤った縦横比へ引き伸ばすため。
+  if (/^\u001b\[[46];\d+;\d+t$/.test(data)) {
+    if (applyWindowOpsResponses(data)) {
+      tui.invalidate();
+      tui.requestRender(true);
+      scheduleReload();
+    }
+    return { consume: true };
   }
   const isLeft = matchesKey(data, Key.left);
   const isRight = matchesKey(data, Key.right);
@@ -134,11 +144,12 @@ function scheduleReload(): void {
 function handleTerminalResize(): void {
   tui.requestRender(true);
   if (getCapabilities().images) {
-    terminal.write("\u001b[16t");
+    terminal.write("\u001b[14t\u001b[16t");
     scheduleReload();
   }
 }
 
+await resolveTerminalCapabilities();
 await reload();
 watcher = watch(documentPath, scheduleReload);
 tui.start();
