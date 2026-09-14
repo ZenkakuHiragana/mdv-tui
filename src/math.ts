@@ -16,7 +16,8 @@ type MathJaxInstance = {
   svgStylesheet: () => unknown;
   startup: {
     adaptor: {
-      innerHTML: (node: unknown) => string;
+      firstChild: (node: unknown) => unknown;
+      serializeXML: (node: unknown) => string;
       outerHTML: (node: unknown) => string;
     };
   };
@@ -123,7 +124,7 @@ export async function renderDisplayMath(
   });
   const adaptor = mathJax.startup.adaptor;
   const svgSource = embedBlackerStyles(
-    adaptor.innerHTML(node).replaceAll("currentColor", "#e6edf3"),
+    adaptor.serializeXML(adaptor.firstChild(node)).replaceAll("currentColor", "#e6edf3"),
     adaptor.outerHTML(mathJax.svgStylesheet()),
   );
   const rasterized = await rasterizeMath(svgSource, maxWidthPx, rasterDensity(cell.heightPx));

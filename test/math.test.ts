@@ -90,3 +90,16 @@ test("display math fits the terminal width without changing its aspect ratio", a
     setCellDimensions(original);
   }
 });
+
+test("display math accepts raw comparison operators", async () => {
+  const formulas = [
+    String.raw`d_k=\begin{cases}1 & k=0\\ 2 & 0<k<N/2\end{cases}`,
+    String.raw`P_x=\sum_iP_i+2\sum_{i<j}\operatorname{Cov}(c_i,c_j)`,
+  ];
+
+  for (const formula of formulas) {
+    const rendered = await renderPng(formula, 100);
+    assert.ok(rendered.dimensions.widthPx > 0);
+    assert.ok(rendered.dimensions.heightPx > 0);
+  }
+});
